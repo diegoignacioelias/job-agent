@@ -1,0 +1,299 @@
+import { useState, useCallback } from "react";
+
+const matchColor = (s) => {
+  if (s >= 80) return { bg: "#052e16", border: "#16a34a", text: "#4ade80" };
+  if (s >= 65) return { bg: "#1c1a04", border: "#ca8a04", text: "#facc15" };
+  return { bg: "#1a0a0a", border: "#dc2626", text: "#f87171" };
+};
+
+const modalidadColor = (m) => {
+  if (m === "Remoto") return "#818cf8";
+  if (m === "Híbrido") return "#34d399";
+  return "#94a3b8";
+};
+
+const diasColor = (d = "") => {
+  const s = d.toLowerCase();
+  if (s.includes("hoy") || s.includes("1 día") || s.includes("ayer")) return "#4ade80";
+  if (s.match(/[2-5]\s*d/)) return "#facc15";
+  return "#f87171";
+};
+
+export default function App() {
+  const [phase, setPhase] = useState("idle");
+  const [jobs, setJobs] = useState([]);
+  const [feedback, setFeedback] = useState({});
+  const [resumen, setResumen] = useState("");
+  const [aprendizaje, setAprendizaje] = useState("");
+  const [round, setRound] = useState(0);
+  const [allCompanies, setAllCompanies] = useState([]);
+  const [agentLog, setAgentLog] = useState([]);
+  const [expandedJob, setExpandedJob] = useState(null);
+
+  const addLog = (msg) => setAgentLog(prev => [...prev, {
+    time: new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+    msg
+  }]);
+
+  const callAPI = async (body) => {
+    const res = await fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  };
+
+  const buscarOfertas = useCallback(async () => {
+    setPhase("loading");
+    setAgentLog([]);
+    setAprendizaje("");
+    addLog("⬡ Iniciando agente de búsqueda web...");
+    await new Promise(r => setTimeout(r, 300));
+    addLog("🔍 Buscando en GetOnBoard, LinkedIn, Laborum, Trabajando.com...");
+    await new Promise(r => setTimeout(r, 300));
+    addLog("⏳ Navegando portales en tiempo real... (30-60 seg)");
+
+    try {
+      const result = await callAPI({ type: "search" });
+      addLog(`✅ ${result.ofertas?.length || 0} ofertas reales encontradas`);
+      setJobs(result.ofertas || []);
+      setResumen(result.resumen_mercado || "");
+      setAllCompanies(result.ofertas?.map(o => o.empresa) || []);
+      setFeedback({});
+      setExpandedJob(null);
+      setRound(r => r + 1);
+      setPhase("results");
+    } catch (e) {
+      addLog("❌ Error: " + e.message);
+      setPhase("idle");
+    }
+  }, []);
+
+  const refinarBusqueda = useCallback(async () => {
+    const liked = jobs.filter(j => feedback[j.id] === "like");
+    const disliked = jobs.filter(j => feedback[j.id] === "dislike");
+    if (!liked.length && !disliked.length) return;
+
+    setPhase("loading");
+    setAgentLog([]);
+    addLog("🧠 Procesando feedback...");
+    await new Promise(r => setTimeout(r, 300));
+    addLog("🔍 Buscando nuevas ofertas ajustadas...");
+    await new Promise(r => setTimeout(r, 300));
+    addLog("⏳ Navegando portales... (30-60 seg)");
+
+    const pos = liked.map(j => `"${j.cargo}" en ${j.empresa} (${j.sector}, ${j.modalidad})`).join("; ");
+    const neg = disliked.map(j => `"${j.cargo}" en ${j.empresa} (${j.sector})`).join("; ");
+
+    try {
+      const result = await callAPI({
+        type: "refine",
+        feedback_pos: pos,
+        feedback_neg: neg,
+        empresas: allCompanies.join(", "),
+      });
+      addLog(`✅ ${result.ofertas?.length || 0} nuevas ofertas encontradas`);
+      if (result.aprendizaje) addLog(`💡 ${result.aprendizaje}`);
+      setJobs(result.ofertas || []);
+      setResumen(result.resumen_mercado || "");
+      setAprendizaje(result.aprendizaje || "");
+      setAllCompanies(prev => [...prev, ...(result.ofertas?.map(o => o.empresa) || [])]);
+      setFeedback({});
+      setExpandedJob(null);
+      setRound(r => r + 1);
+      setPhase("results");
+    } catch (e) {
+      addLog("❌ Error: " + e.message);
+      setPhase("idle");
+    }
+  }, [jobs, feedback, allCompanies]);
+
+  const toggleFeedback = (id, type) => setFeedback(prev => ({ ...prev, [id]: prev[id] === type ? undefined : type }));
+  const feedbackCount = Object.values(feedback).filter(Boolean).length;
+  const sortedJobs = [...jobs].sort((a, b) => b.match_score - a.match_score);
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#080810", color: "#dde1f0", fontFamily: "'DM Mono', 'Fira Code', monospace" }}>
+
+      {/* Header */}
+      <div style={{ background: "#0c0c18", borderBottom: "1px solid #1a1a2e", padding: "20px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontSize: "11px", letterSpacing: "0.25em", color: "#6366f1", textTransform: "uppercase", marginBottom: "4px" }}>⬡ Agente de Búsqueda · Web Real</div>
+          <div style={{ fontSize: "20px", fontWeight: "700", color: "#fff", letterSpacing: "-0.02em" }}>Diego Elías · ICI Chile</div>
+        </div>
+        <div style={{ textAlign: "right", fontSize: "11px", color: "#4a4a6a", lineHeight: "1.6" }}>
+          <div style={{ color: "#818cf8" }}>SQL · Power BI · Excel · Python</div>
+          <div>LATAM · Cencosud · HP</div>
+          {round > 0 && <div style={{ color: "#6366f1", marginTop: "4px" }}>Ronda {round}</div>}
+        </div>
+      </div>
+
+      <div style={{ padding: "28px", maxWidth: "860px", margin: "0 auto" }}>
+
+        {/* Log */}
+        {agentLog.length > 0 && (
+          <div style={{ background: "#0c0c18", border: "1px solid #1a1a2e", borderRadius: "8px", padding: "14px 16px", marginBottom: "24px", fontSize: "11px" }}>
+            {agentLog.map((log, i) => (
+              <div key={i} style={{ display: "flex", gap: "12px", marginBottom: "4px", opacity: i === agentLog.length - 1 ? 1 : 0.5 }}>
+                <span style={{ color: "#4a4a6a", flexShrink: 0 }}>{log.time}</span>
+                <span style={{ color: i === agentLog.length - 1 ? "#a5b4fc" : "#6a6a8a" }}>{log.msg}</span>
+              </div>
+            ))}
+            {phase === "loading" && (
+              <div style={{ marginTop: "10px", display: "flex", gap: "4px" }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#6366f1", animation: `pulse 1s ease-in-out ${i * 0.2}s infinite alternate` }} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Aprendizaje */}
+        {aprendizaje && phase === "results" && (
+          <div style={{ background: "#0d1117", border: "1px solid #1e3a1e", borderRadius: "8px", padding: "12px 16px", marginBottom: "20px", fontSize: "12px", color: "#4ade80" }}>
+            💡 {aprendizaje}
+          </div>
+        )}
+
+        {/* Idle */}
+        {phase === "idle" && (
+          <div style={{ textAlign: "center", padding: "60px 20px", border: "1px dashed #1a1a2e", borderRadius: "12px" }}>
+            <div style={{ fontSize: "40px", marginBottom: "16px" }}>⬡</div>
+            <div style={{ fontSize: "16px", color: "#818cf8", marginBottom: "8px", fontWeight: "600" }}>Agente listo</div>
+            <div style={{ fontSize: "12px", color: "#4a4a6a", marginBottom: "8px", lineHeight: "1.8" }}>
+              Busca ofertas <strong style={{ color: "#6366f1" }}>reales</strong> con links directos a cada oferta<br />
+              GetOnBoard · LinkedIn · Laborum · Indeed · Trabajando · Computrabajo · Bumeran
+            </div>
+            <div style={{ fontSize: "11px", color: "#2a2a4a", marginBottom: "28px" }}>⚠️ Puede tardar 30-60 segundos — navega la web en tiempo real</div>
+            <button onClick={buscarOfertas} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: "8px", padding: "12px 28px", fontSize: "13px", fontFamily: "inherit", fontWeight: "600", cursor: "pointer" }}>
+              Buscar ofertas reales →
+            </button>
+          </div>
+        )}
+
+        {/* Resumen */}
+        {resumen && phase === "results" && (
+          <div style={{ fontSize: "12px", color: "#6a6a8a", marginBottom: "20px", padding: "10px 14px", borderLeft: "2px solid #6366f1" }}>
+            {resumen}
+          </div>
+        )}
+
+        {/* Cards */}
+        {phase === "results" && (
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {sortedJobs.map((job) => {
+                const mc = matchColor(job.match_score);
+                const isExpanded = expandedJob === job.id;
+                const fb = feedback[job.id];
+
+                return (
+                  <div key={job.id} style={{ background: "#0c0c18", border: `1px solid ${fb === "like" ? "#16a34a" : fb === "dislike" ? "#dc2626" : "#1a1a2e"}`, borderRadius: "10px", overflow: "hidden", transition: "border-color 0.2s" }}>
+
+                    <div onClick={() => setExpandedJob(isExpanded ? null : job.id)} style={{ padding: "16px 18px", cursor: "pointer" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: "14px", fontWeight: "700", color: "#e8e8f8", marginBottom: "3px" }}>{job.cargo}</div>
+                          <div style={{ fontSize: "12px", color: "#818cf8", marginBottom: "8px" }}>
+                            {job.empresa} · <span style={{ color: "#4a4a6a" }}>{job.sector}</span>
+                          </div>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                            <span style={{ fontSize: "11px", color: modalidadColor(job.modalidad) }}>◆ {job.modalidad}</span>
+                            <span style={{ fontSize: "11px", color: "#4a4a6a" }}>📍 {job.ubicacion}</span>
+                            <span style={{ fontSize: "11px", color: "#4a4a6a" }}>via {job.fuente}</span>
+                            {job.dias_publicada && (
+                              <span style={{ fontSize: "11px", color: diasColor(job.dias_publicada), background: "#13131f", padding: "2px 7px", borderRadius: "4px" }}>
+                                🕐 {job.dias_publicada}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ background: mc.bg, border: `1px solid ${mc.border}`, borderRadius: "6px", padding: "4px 10px", fontSize: "13px", fontWeight: "700", color: mc.text, marginBottom: "4px" }}>
+                            {job.match_score}%
+                          </div>
+                          <div style={{ fontSize: "10px", color: "#4a4a6a" }}>match</div>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: "10px", fontSize: "12px", color: "#facc15", fontWeight: "600" }}>💰 {job.rango_sueldo}</div>
+                    </div>
+
+                    {isExpanded && (
+                      <div style={{ padding: "14px 18px 16px", borderTop: "1px solid #1a1a2e" }}>
+                        <div style={{ fontSize: "12px", color: "#9090b0", lineHeight: "1.7", marginBottom: "12px" }}>{job.descripcion}</div>
+
+                        <div style={{ marginBottom: "12px" }}>
+                          <div style={{ fontSize: "10px", color: "#4a4a6a", letterSpacing: "0.1em", marginBottom: "6px" }}>REQUISITOS CLAVE</div>
+                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                            {job.requisitos_clave?.map((r, i) => (
+                              <span key={i} style={{ fontSize: "10px", background: "#13131f", border: "1px solid #2a2a3e", borderRadius: "4px", padding: "3px 8px", color: "#9090b0" }}>{r}</span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {job.match_herramientas?.length > 0 && (
+                          <div style={{ marginBottom: "14px" }}>
+                            <div style={{ fontSize: "10px", color: "#4a4a6a", letterSpacing: "0.1em", marginBottom: "6px" }}>TUS HERRAMIENTAS QUE PIDEN</div>
+                            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                              {job.match_herramientas.map((h, i) => (
+                                <span key={i} style={{ fontSize: "10px", background: "#0d1117", border: "1px solid #16a34a", borderRadius: "4px", padding: "3px 8px", color: "#4ade80" }}>✓ {h}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ paddingTop: "12px", borderTop: "1px solid #1a1a2e" }}>
+                          <div style={{ fontSize: "10px", color: "#4a4a6a", letterSpacing: "0.1em", marginBottom: "8px" }}>VER OFERTA REAL</div>
+                          {job.url && job.url.startsWith("http") ? (
+                            <a href={job.url} target="_blank" rel="noopener noreferrer" style={{
+                              display: "inline-flex", alignItems: "center", gap: "6px",
+                              fontSize: "12px", background: "#13131f", border: "1px solid #6366f1",
+                              borderRadius: "6px", padding: "8px 18px", color: "#818cf8",
+                              textDecoration: "none", fontFamily: "inherit", fontWeight: "600",
+                            }}>
+                              🔗 Ir a la oferta en {job.fuente} ↗
+                            </a>
+                          ) : (
+                            <span style={{ fontSize: "11px", color: "#4a4a6a" }}>URL no disponible</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ padding: "10px 18px", borderTop: "1px solid #1a1a2e", display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span style={{ fontSize: "10px", color: "#4a4a6a", marginRight: "4px" }}>¿Te interesa?</span>
+                      <button onClick={() => toggleFeedback(job.id, "like")} style={{ background: fb === "like" ? "#16a34a" : "transparent", border: `1px solid ${fb === "like" ? "#16a34a" : "#2a2a3e"}`, borderRadius: "6px", padding: "5px 14px", fontSize: "12px", color: fb === "like" ? "#fff" : "#4a4a6a", cursor: "pointer", fontFamily: "inherit" }}>👍 Sí</button>
+                      <button onClick={() => toggleFeedback(job.id, "dislike")} style={{ background: fb === "dislike" ? "#7f1d1d" : "transparent", border: `1px solid ${fb === "dislike" ? "#dc2626" : "#2a2a3e"}`, borderRadius: "6px", padding: "5px 14px", fontSize: "12px", color: fb === "dislike" ? "#fca5a5" : "#4a4a6a", cursor: "pointer", fontFamily: "inherit" }}>👎 No</button>
+                      <button onClick={() => setExpandedJob(isExpanded ? null : job.id)} style={{ background: "transparent", border: "1px solid #2a2a3e", borderRadius: "6px", padding: "5px 14px", fontSize: "12px", color: "#4a4a6a", cursor: "pointer", fontFamily: "inherit", marginLeft: "auto" }}>
+                        {isExpanded ? "▲ Menos" : "▼ Ver detalle"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: "24px", display: "flex", gap: "12px", alignItems: "center", justifyContent: "space-between", padding: "16px", background: "#0c0c18", border: "1px solid #1a1a2e", borderRadius: "10px" }}>
+              <div style={{ fontSize: "12px", color: "#4a4a6a" }}>
+                {feedbackCount > 0 ? `${feedbackCount} oferta${feedbackCount > 1 ? "s" : ""} evaluada${feedbackCount > 1 ? "s" : ""} · el agente ajustará la búsqueda` : "Evalúa las ofertas para refinar la búsqueda"}
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button onClick={buscarOfertas} style={{ background: "transparent", border: "1px solid #2a2a3e", borderRadius: "8px", padding: "9px 18px", fontSize: "12px", color: "#6a6a8a", cursor: "pointer", fontFamily: "inherit" }}>
+                  Nueva búsqueda
+                </button>
+                <button onClick={refinarBusqueda} disabled={feedbackCount === 0} style={{ background: feedbackCount > 0 ? "#6366f1" : "#1a1a2e", border: "none", borderRadius: "8px", padding: "9px 18px", fontSize: "12px", color: feedbackCount > 0 ? "#fff" : "#4a4a6a", cursor: feedbackCount > 0 ? "pointer" : "default", fontFamily: "inherit", fontWeight: "600" }}>
+                  Refinar con feedback →
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+      <style>{`@keyframes pulse { from { opacity: 0.3; transform: scale(0.8); } to { opacity: 1; transform: scale(1.2); } }`}</style>
+    </div>
+  );
+}
