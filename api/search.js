@@ -1,4 +1,4 @@
-export const config = { runtime: 'edge' };
+
 
 const SYSTEM_PROMPT = `Eres un agente experto en búsqueda de empleo para profesionales chilenos. USA web_search para encontrar ofertas reales.
 
