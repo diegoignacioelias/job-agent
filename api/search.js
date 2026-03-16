@@ -11,6 +11,8 @@ Preferencias: Retail > Tecnología > Logística > Banca. Sueldo $2M-$2.5M líqui
 
 USA web_search para encontrar ofertas REALES publicadas esta semana en Chile.
 Busca en: getonbrd.com, linkedin.com/jobs, laborum.cl, trabajando.cl, computrabajo.cl
+Solo incluye ofertas publicadas en los últimos 7 días. Si no puedes verificar la fecha, descártala.
+Prioriza GetOnBoard y LinkedIn que muestran fecha de publicación claramente.
 Haz al menos 4 búsquedas. Extrae URL real y completa de cada oferta encontrada.
 
 Responde SOLO con JSON válido:
