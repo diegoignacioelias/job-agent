@@ -1,109 +1,20 @@
 import { useState, useCallback } from "react";
 
-const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
-
-const SYSTEM_PROMPT = `Eres un agente experto en búsqueda de empleo para profesionales chilenos.
-
-El candidato es Diego Elías:
-- Título: Ingeniero Civil Industrial (UAI), mención TI. Nivel Semi Senior.
-- Experiencia: LATAM Airlines (Mejora Continua), Cencosud (Control de Gestión), HP (Trainee)
-- Herramientas: Excel Avanzado, SQL Avanzado, Power BI, Python básico, Scrum
-- Idiomas: Inglés avanzado. Ubicación: Santiago, Chile.
-
-Cargos objetivo por PRIORIDAD:
-1. ALTA: Project Manager, Jefe Proyectos, PMO, Mejora Continua, Lean, Excelencia Operacional
-2. MEDIA: Business Analyst, Analista Funcional
-3. BAJA: BI, Control de Gestión, Data Analyst
-
-Preferencias: Retail > Tecnología > Logística > Banca > Consultoría > Minería.
-Sueldo: $2.000.000 - $2.500.000 líquido. Empresas grandes o startups con estructura.
-
-Genera 5 ofertas REALISTAS con empresas reales en Chile. Para search_keywords usa 3-4 palabras clave del cargo.
-
-Responde SOLO con JSON válido sin texto ni backticks:
-{
-  "ofertas": [
-    {
-      "id": 1,
-      "empresa": "nombre real",
-      "sector": "sector",
-      "cargo": "título del cargo",
-      "ubicacion": "Santiago, Chile",
-      "modalidad": "Presencial | Híbrido | Remoto",
-      "rango_sueldo": "rango CLP líquido o No especificado",
-      "descripcion": "2-3 líneas del rol",
-      "requisitos_clave": ["req1", "req2", "req3"],
-      "match_herramientas": ["herramientas de Diego que coinciden"],
-      "search_keywords": "palabras clave para buscar esta oferta",
-      "match_score": 75
-    }
-  ],
-  "resumen_mercado": "Una línea sobre el mercado actual"
-}`;
-
-const REFINE_PROMPT = (fp, fn, eu) => `Agente búsqueda laboral Diego Elías, ICI semi senior Santiago.
-Perfil: SQL, Excel, Power BI, Python, Inglés avanzado. LATAM, Cencosud.
-Preferencias: PM > Business Analyst. Retail > Tech. Sueldo $2M-$2.5M.
-LE GUSTARON: ${fp || "ninguno"}. NO GUSTARON: ${fn || "ninguno"}. NO repetir: ${eu}.
-Genera 5 nuevas ofertas ajustadas. Mismo formato JSON con search_keywords y aprendizaje.`;
-
-const buildLinks = (job) => {
-  const kw = job.search_keywords || job.cargo;
-  const q = encodeURIComponent(kw);
-  const qPlus = kw.split(" ").join("+");
-  const qDash = kw.split(" ").join("-").toLowerCase();
-  return [
-    { label: "LinkedIn", url: `https://www.linkedin.com/jobs/search/?keywords=${qPlus}&location=Chile&f_TPR=r604800` },
-    { label: "GetOnBoard", url: `https://www.getonbrd.com/jobs?q=${q}` },
-    { label: "Laborum", url: `https://www.laborum.cl/empleos?q=${q}&l=Santiago&posted=7` },
-    { label: "Indeed", url: `https://cl.indeed.com/jobs?q=${q}&l=Santiago%2C+Chile&fromage=7` },
-    { label: "Trabajando.com", url: `https://www.trabajando.cl/empleo/buscar/?q=${q}&ciudad=Santiago` },
-    { label: "Computrabajo", url: `https://www.computrabajo.cl/empleos?q=${q}&l=Santiago` },
-    { label: "Bumeran", url: `https://www.bumeran.cl/empleos-busqueda-${qDash}.html?pais=chile` },
-  ];
-};
-
 const matchColor = (s) => {
   if (s >= 80) return { bg: "#052e16", border: "#16a34a", text: "#4ade80" };
   if (s >= 65) return { bg: "#1c1a04", border: "#ca8a04", text: "#facc15" };
   return { bg: "#1a0a0a", border: "#dc2626", text: "#f87171" };
 };
-
 const modalidadColor = (m) => {
   if (m === "Remoto") return "#818cf8";
   if (m === "Híbrido") return "#34d399";
   return "#94a3b8";
 };
-
-const callClaude = async (system, userMsg) => {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": API_KEY,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4000,
-      system,
-      messages: [{ role: "user", content: userMsg }],
-    }),
-  });
-  const data = await response.json();
-  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-  const text = data.content.filter(b => b.type === "text").map(b => b.text).join("");
-  const clean = text.replace(/```json|```/g, "").trim();
-  const start = clean.indexOf("{");
-  if (start === -1) throw new Error("No JSON en respuesta");
-  let depth = 0, end = -1;
-  for (let i = start; i < clean.length; i++) {
-    if (clean[i] === "{") depth++;
-    else if (clean[i] === "}") { depth--; if (depth === 0) { end = i; break; } }
-  }
-  if (end === -1) throw new Error("JSON incompleto");
-  return JSON.parse(clean.slice(start, end + 1));
+const publicadaColor = (p = "") => {
+  const s = p.toLowerCase();
+  if (s.includes("hoy") || s.includes("1 día")) return "#4ade80";
+  if (s.includes("2") || s.includes("3")) return "#facc15";
+  return "#f87171";
 };
 
 export default function App() {
@@ -122,18 +33,29 @@ export default function App() {
     msg
   }]);
 
+  const callAPI = async (body) => {
+    const res = await fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  };
+
   const buscarOfertas = useCallback(async () => {
     setPhase("loading");
     setAgentLog([]);
     setAprendizaje("");
     addLog("⬡ Iniciando agente...");
-    await new Promise(r => setTimeout(r, 300));
-    addLog("🧠 Analizando perfil y preferencias...");
-    await new Promise(r => setTimeout(r, 400));
-    addLog("🔍 Generando ofertas y links filtrados...");
+    await new Promise(r => setTimeout(r, 200));
+    addLog("🔍 Buscando en GetOnBoard, LinkedIn, Laborum, Trabajando.com...");
+    await new Promise(r => setTimeout(r, 200));
+    addLog("⏳ Navegando portales en tiempo real... (puede tardar 1-2 min)");
     try {
-      const result = await callClaude(SYSTEM_PROMPT, "Busca las mejores ofertas para el perfil de Diego.");
-      addLog(`✅ ${result.ofertas?.length || 0} ofertas encontradas`);
+      const result = await callAPI({ type: "search" });
+      addLog(`✅ ${result.ofertas?.length || 0} ofertas reales encontradas`);
       setJobs(result.ofertas || []);
       setResumen(result.resumen_mercado || "");
       setAllCompanies(result.ofertas?.map(o => o.empresa) || []);
@@ -154,15 +76,13 @@ export default function App() {
     setPhase("loading");
     setAgentLog([]);
     addLog("🧠 Procesando feedback...");
-    await new Promise(r => setTimeout(r, 400));
-    addLog("🔍 Generando nuevas ofertas ajustadas...");
+    await new Promise(r => setTimeout(r, 200));
+    addLog("🔍 Buscando nuevas ofertas ajustadas...");
+    addLog("⏳ Navegando portales... (puede tardar 1-2 min)");
     const pos = liked.map(j => `"${j.cargo}" en ${j.empresa} (${j.sector})`).join("; ");
     const neg = disliked.map(j => `"${j.cargo}" en ${j.empresa} (${j.sector})`).join("; ");
     try {
-      const result = await callClaude(
-        REFINE_PROMPT(pos, neg, allCompanies.join(", ")),
-        "Refina la búsqueda con el feedback."
-      );
+      const result = await callAPI({ type: "refine", feedback_pos: pos, feedback_neg: neg, empresas: allCompanies.join(", ") });
       addLog(`✅ ${result.ofertas?.length || 0} nuevas ofertas encontradas`);
       if (result.aprendizaje) addLog(`💡 ${result.aprendizaje}`);
       setJobs(result.ofertas || []);
@@ -187,7 +107,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: "#080810", color: "#dde1f0", fontFamily: "'DM Mono', 'Fira Code', monospace" }}>
       <div style={{ background: "#0c0c18", borderBottom: "1px solid #1a1a2e", padding: "20px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: "11px", letterSpacing: "0.25em", color: "#6366f1", textTransform: "uppercase", marginBottom: "4px" }}>⬡ Agente de Búsqueda Laboral</div>
+          <div style={{ fontSize: "11px", letterSpacing: "0.25em", color: "#6366f1", textTransform: "uppercase", marginBottom: "4px" }}>⬡ Agente de Búsqueda · Web Real</div>
           <div style={{ fontSize: "20px", fontWeight: "700", color: "#fff" }}>Diego Elías · ICI Chile</div>
         </div>
         <div style={{ textAlign: "right", fontSize: "11px", color: "#4a4a6a", lineHeight: "1.6" }}>
@@ -224,11 +144,13 @@ export default function App() {
           <div style={{ textAlign: "center", padding: "60px 20px", border: "1px dashed #1a1a2e", borderRadius: "12px" }}>
             <div style={{ fontSize: "40px", marginBottom: "16px" }}>⬡</div>
             <div style={{ fontSize: "16px", color: "#818cf8", marginBottom: "8px", fontWeight: "600" }}>Agente listo</div>
-            <div style={{ fontSize: "12px", color: "#4a4a6a", marginBottom: "28px", lineHeight: "1.8" }}>
-              Ofertas rankeadas por match · Links a 7 portales filtrados por última semana
+            <div style={{ fontSize: "12px", color: "#4a4a6a", marginBottom: "8px", lineHeight: "1.8" }}>
+              Busca ofertas <strong style={{ color: "#6366f1" }}>reales</strong> con link directo a cada oferta<br />
+              GetOnBoard · LinkedIn · Laborum · Trabajando.com · Computrabajo
             </div>
+            <div style={{ fontSize: "11px", color: "#2a2a4a", marginBottom: "28px" }}>Puede tardar 1-2 minutos — navega la web en tiempo real</div>
             <button onClick={buscarOfertas} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: "8px", padding: "12px 28px", fontSize: "13px", fontFamily: "inherit", fontWeight: "600", cursor: "pointer" }}>
-              Buscar ofertas →
+              Buscar ofertas reales →
             </button>
           </div>
         )}
@@ -246,7 +168,6 @@ export default function App() {
                 const mc = matchColor(job.match_score);
                 const isExpanded = expandedJob === job.id;
                 const fb = feedback[job.id];
-                const links = buildLinks(job);
                 return (
                   <div key={job.id} style={{ background: "#0c0c18", border: `1px solid ${fb === "like" ? "#16a34a" : fb === "dislike" ? "#dc2626" : "#1a1a2e"}`, borderRadius: "10px", overflow: "hidden" }}>
                     <div onClick={() => setExpandedJob(isExpanded ? null : job.id)} style={{ padding: "16px 18px", cursor: "pointer" }}>
@@ -257,6 +178,8 @@ export default function App() {
                           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                             <span style={{ fontSize: "11px", color: modalidadColor(job.modalidad) }}>◆ {job.modalidad}</span>
                             <span style={{ fontSize: "11px", color: "#4a4a6a" }}>📍 {job.ubicacion}</span>
+                            {job.fuente && <span style={{ fontSize: "11px", color: "#4a4a6a" }}>via {job.fuente}</span>}
+                            {job.publicada && <span style={{ fontSize: "11px", color: publicadaColor(job.publicada), background: "#13131f", padding: "2px 7px", borderRadius: "4px" }}>🕐 {job.publicada}</span>}
                           </div>
                         </div>
                         <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -285,14 +208,13 @@ export default function App() {
                           </div>
                         )}
                         <div style={{ paddingTop: "12px", borderTop: "1px solid #1a1a2e" }}>
-                          <div style={{ fontSize: "10px", color: "#4a4a6a", letterSpacing: "0.1em", marginBottom: "10px" }}>BUSCAR EN PORTALES — última semana</div>
-                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                            {links.map(({ label, url }) => (
-                              <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", background: "#13131f", border: "1px solid #6366f1", borderRadius: "6px", padding: "6px 12px", color: "#818cf8", textDecoration: "none", fontFamily: "inherit" }}>
-                                🔗 {label} ↗
-                              </a>
-                            ))}
-                          </div>
+                          {job.url && job.url.startsWith("http") ? (
+                            <a href={job.url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12px", background: "#13131f", border: "1px solid #6366f1", borderRadius: "8px", padding: "10px 20px", color: "#818cf8", textDecoration: "none", fontFamily: "inherit", fontWeight: "600" }}>
+                              🔗 Ver oferta en {job.fuente} ↗
+                            </a>
+                          ) : (
+                            <span style={{ fontSize: "11px", color: "#4a4a6a" }}>URL no disponible</span>
+                          )}
                         </div>
                       </div>
                     )}
