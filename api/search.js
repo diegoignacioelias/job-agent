@@ -69,7 +69,7 @@ async function runAgentLoop(apiKey, system, userMessage) {
     if (data.stop_reason === "end_turn") {
       const text = data.content.filter(b => b.type === "text").map(b => b.text).join("");
       const clean = text.replace(/```json|```/g, "").trim();
-      const start = clean.indexOf('{"ofertas"');
+      const start = clean.indexOf('{');
       if (start !== -1) {
         let depth = 0, end = -1;
         for (let j = start; j < clean.length; j++) {
