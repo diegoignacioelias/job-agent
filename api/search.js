@@ -13,21 +13,19 @@ Preferencias:
 - Empresas grandes o startups con estructura. Evitar pymes informales.
 
 INSTRUCCIONES:
-1. Usa web_search para buscar ofertas REALES en Chile
-2. Haz AL MENOS 6 búsquedas en distintos portales y con distintos cargos
-3. Busca en: getonbrd.com, linkedin.com/jobs, laborum.cl, trabajando.cl, computrabajo.cl
-4. Solo incluye ofertas que estén ACTIVAS y aceptando postulaciones ahora
-5. Prioriza ofertas publicadas en los últimos 7 días
-6. Si una oferta dice "cerrada", "no acepta postulaciones" o similar, descártala
-7. Encuentra EXACTAMENTE 10 ofertas activas con URL real y completa
-
-Queries sugeridos:
-- "project manager Santiago Chile" site:getonbrd.com
-- "jefe de proyectos Santiago" site:linkedin.com/jobs
-- "mejora continua Santiago Chile 2025" site:laborum.cl
-- "business analyst Santiago" site:trabajando.cl
-- "PMO analista funcional Santiago" site:computrabajo.cl
-- "excelencia operacional Chile" site:getonbrd.com
+1. Usa web_search para buscar ofertas REALES directamente en los portales de empleo
+2. Haz EXACTAMENTE estas 7 búsquedas en orden, usando los filtros nativos de cada portal:
+   - Búsqueda 1: visita https://www.getonbrd.com/jobs?q=business+analyst+OR+data+analyst+OR+analista+BI&country=CL
+   - Búsqueda 2: visita https://www.getonbrd.com/jobs?q=mejora+continua+OR+analista+de+procesos+OR+business+intelligence&country=CL
+   - Búsqueda 3: visita https://www.linkedin.com/jobs/search/?keywords=business+analyst+data+analyst+Chile&location=Chile&f_TPR=r2592000
+   - Búsqueda 4: visita https://www.linkedin.com/jobs/search/?keywords=mejora+continua+analista+procesos+BI+Chile&location=Chile&f_TPR=r2592000
+   - Búsqueda 5: visita https://www.laborum.cl/empleos?q=business+analyst+OR+data+analyst&l=Santiago&posted=30
+   - Búsqueda 6: visita https://www.trabajando.cl/empleo/buscar/?q=business+analyst+analista+BI&ciudad=Santiago
+   - Búsqueda 7: visita https://www.computrabajo.cl/empleos?q=business+analyst+data+analyst&l=Santiago
+3. De cada búsqueda extrae todas las ofertas que aparezcan con su URL real y completa
+4. Las ofertas de estos portales con estos filtros son ACTIVAS por definición — inclúyelas todas
+5. Selecciona las 10 mejores ofertas según el perfil de Diego
+6. Encuentra EXACTAMENTE 10 ofertas con URL real y completa
 
 Responde SOLO con JSON válido:
 {
@@ -69,11 +67,17 @@ Feedback del usuario:
 - NO repetir estas empresas: ${eu}
 
 INSTRUCCIONES:
-1. Usa web_search para buscar ofertas NUEVAS y DISTINTAS a las anteriores
-2. Haz AL MENOS 6 búsquedas enfocadas en los cargos y sectores que le gustaron
-3. Solo ofertas ACTIVAS que acepten postulaciones ahora
-4. Encuentra EXACTAMENTE 10 ofertas con URL real
+1. Usa web_search para buscar ofertas NUEVAS directamente en los portales
+2. Enfócate en los cargos y sectores que le gustaron al usuario
+3. Usa estas URLs base ajustando las keywords según el feedback:
+   - https://www.getonbrd.com/jobs?q=CARGO&country=CL
+   - https://www.linkedin.com/jobs/search/?keywords=CARGO&location=Chile&f_TPR=r2592000
+   - https://www.laborum.cl/empleos?q=CARGO&l=Santiago&posted=30
+   - https://www.trabajando.cl/empleo/buscar/?q=CARGO&ciudad=Santiago
+   - https://www.computrabajo.cl/empleos?q=CARGO&l=Santiago
+4. Haz al menos 6 búsquedas con distintos cargos y portales
 5. NO repetir ninguna empresa de la lista anterior
+6. Encuentra EXACTAMENTE 10 ofertas activas con URL real
 
 Responde SOLO con JSON válido:
 {
